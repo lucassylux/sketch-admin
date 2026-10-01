@@ -37,10 +37,19 @@ func NewServer(store *Store, ui fs.FS) *Server {
 	return &Server{store: store, ui: ui, sessions: map[string]session{}}
 }
 
-// Handler 组装路由（Go 1.22+ 方法+路径模式）；项目自定义端点可再包一层挂同树
+// Handler 组装完整服务（含静态 UI）；纯 API 项目可用 Register 挂进自己的路由树
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	s.Register(mux)
+	if s.ui != nil {
+		mux.Handle("GET /", http.HandlerFunc(s.serveUI))
+	}
+	return s.withCommonHeaders(mux)
+}
 
+// Register 把契约全量端点注册到外部 mux（业务项目挂同树共用会话与安全头；
+// 注意外部 mux 需自行套 withCommonHeaders，或用 Handler 组合）
+func (s *Server) Register(mux *http.ServeMux) {
 	// 认证
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -75,11 +84,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/users/{username}/password", s.requireRole("admin", s.handleResetUserPassword))
 	mux.HandleFunc("DELETE /api/users/{username}", s.requireRole("admin", s.handleDeleteUser))
 
-	// 静态 SPA（可选；未命中路径回退 index.html 由前端路由接管）
-	if s.ui != nil {
-		mux.Handle("GET /", http.HandlerFunc(s.serveUI))
-	}
-	return s.withCommonHeaders(mux)
 }
 
 // ---------- 中间件 ----------
@@ -216,6 +220,14 @@ func (s *Server) issueSession(w http.ResponseWriter, u User) {
 		Name: sessionCookie, Value: tok, Path: "/", HttpOnly: true,
 		SameSite: http.SameSiteLaxMode, MaxAge: int(ttl.Seconds()),
 	})
+}
+
+// Authenticate 解析请求的会话用户（业务端点复用；未登录返回 nil）
+func (s *Server) Authenticate(r *http.Request) *User { return s.sessionUser(r) }
+
+// RequireUI 业务端点用的会话守卫（未登录 401 JSON，与契约错误格式一致）
+func (s *Server) RequireUI(next func(w http.ResponseWriter, r *http.Request, u *User)) http.HandlerFunc {
+	return s.requireUI(next)
 }
 
 func (s *Server) sessionUser(r *http.Request) *User {
