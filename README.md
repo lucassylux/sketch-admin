@@ -42,7 +42,7 @@ http.ListenAndServe(":8280", srv.Handler())
 <dependency>
   <groupId>com.xzsoft</groupId>
   <artifactId>sketch-admin-spring-boot-starter</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
@@ -51,6 +51,22 @@ sketch-admin:
   db-path: data/myapp-admin     # H2 单文件
   # seed-admin-password: 留空则随机生成并日志打印一次
 ```
+
+**已有自研认证的应用（桥接模式）**：宿主实现一个 Bean 即可只挂管理端点、不动宿主登录体系：
+
+```java
+@Bean
+AdminSessionBridge bridge() {
+    return request -> {
+        var user = MyAuth.currentUser(request);   // 宿主自己的 JWT/会话解析
+        if (user == null) return null;            // 未登录 → 管理端点回 401
+        return AdminPrincipal.of(user.getName(), "admin"); // role: admin/editor/viewer
+    };
+}
+```
+
+提供该 Bean 后 starter 自动切换：只注册字典/审计/用户/会话设置四组端点（鉴权走桥），
+starter 自带的登录/SSO/会话端点不再注册（与宿主 `/api/auth/*` 零冲突）。
 
 ### 前端
 

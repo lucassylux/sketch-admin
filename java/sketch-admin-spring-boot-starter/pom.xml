@@ -6,7 +6,7 @@
 
   <groupId>com.xzsoft</groupId>
   <artifactId>sketch-admin-spring-boot-starter</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <name>sketch-admin-spring-boot-starter</name>
   <description>sketch-admin 的 Java 后端实现：契约见 contracts/api.md（与 go-admin 同构）</description>
 

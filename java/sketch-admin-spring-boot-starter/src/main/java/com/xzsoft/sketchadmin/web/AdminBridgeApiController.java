@@ -1,0 +1,206 @@
+package com.xzsoft.sketchadmin.web;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.xzsoft.sketchadmin.store.AdminStore;
+
+import jakarta.servlet.http.HttpServletRequest;
+
+/**
+ * 桥接模式管理端点：宿主已带认证（实现 {@link AdminSessionBridge}）时装配，
+ * 只提供字典/审计/用户/会话设置四组管理端点；登录与 SSO 由宿主自己的体系承担。
+ * 错误与契约口径同 {@link AdminApiController}（{"error": "..."} + HTTP 状态码）。
+ */
+@RestController
+public class AdminBridgeApiController {
+
+    private static final Set<String> ROLES = Set.of("admin", "editor", "viewer");
+    private static final Map<String, Integer> RANK = Map.of("viewer", 1, "editor", 2, "admin", 3);
+
+    private final AdminStore store;
+    private final AdminSessionBridge bridge;
+
+    public AdminBridgeApiController(AdminStore store, AdminSessionBridge bridge) {
+        this.store = store;
+        this.bridge = bridge;
+    }
+
+
+    private ResponseEntity<Map<String, String>> require(HttpServletRequest req, String minRole) {
+        AdminSessionBridge.AdminPrincipal p = bridge.resolve(req);
+        if (p == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "未登录"));
+        }
+        if (minRole != null && RANK.getOrDefault(p.roleOrDefault(), 0) < RANK.get(minRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "角色权限不足（需要 " + minRole + "）"));
+        }
+        return null;
+    }
+
+    private AdminSessionBridge.AdminPrincipal user(HttpServletRequest req) {
+        return bridge.resolve(req);
+    }
+
+    // ---------- 字典 ----------
+
+    @GetMapping("/api/dict-types")
+    public ResponseEntity<?> dictTypes(HttpServletRequest req) {
+        var denied = require(req, null);
+        if (denied != null) return denied;
+        List<Map<String, Object>> list = store.listDictTypes();
+        for (Map<String, Object> t : list) {
+            t.put("name", "rule-severity".equals(t.get("type")) ? "规则严重级" : t.get("type"));
+        }
+        return ok(list);
+    }
+
+    @GetMapping("/api/dicts")
+    public ResponseEntity<?> dicts(HttpServletRequest req, String type, boolean enabled) {
+        var denied = require(req, null);
+        if (denied != null) return denied;
+        return ok(store.listDicts(type, enabled));
+    }
+
+    @PostMapping("/api/dicts")
+    public ResponseEntity<?> dictSave(HttpServletRequest req, @RequestBody Map<String, Object> body) {
+        var denied = require(req, "editor");
+        if (denied != null) return denied;
+        try {
+            Long id = body.get("id") == null ? null : Long.valueOf(body.get("id").toString());
+            var saved = store.saveDict(id, str(body, "type"), str(body, "label"), str(body, "value"),
+                    body.get("sort") == null ? 0 : Integer.parseInt(body.get("sort").toString()),
+                    !Boolean.FALSE.equals(body.get("enabled")));
+            store.audit(user(req).username(), id == null ? "create" : "update",
+                    "dict/" + saved.get("type") + "/" + saved.get("value"), String.valueOf(saved.get("label")));
+            return ok(saved);
+        } catch (IllegalArgumentException e) {
+            return err(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/api/dicts/{id}")
+    public ResponseEntity<?> dictDelete(HttpServletRequest req, @PathVariable long id) {
+        var denied = require(req, "editor");
+        if (denied != null) return denied;
+        if (store.deleteDict(id) == 0) return err(HttpStatus.NOT_FOUND, "不存在");
+        store.audit(user(req).username(), "delete", "dict/" + id, "");
+        return ok(Map.of("ok", true));
+    }
+
+    // ---------- 审计 / 用户 ----------
+
+    @GetMapping("/api/audit")
+    public ResponseEntity<?> audit(HttpServletRequest req) {
+        var denied = require(req, "admin");
+        if (denied != null) return denied;
+        return ok(store.listAudit(500));
+    }
+
+    @GetMapping("/api/users")
+    public ResponseEntity<?> users(HttpServletRequest req) {
+        var denied = require(req, "admin");
+        if (denied != null) return denied;
+        return ok(store.listUsers());
+    }
+
+    @PostMapping("/api/users")
+    public ResponseEntity<?> userCreate(HttpServletRequest req, @RequestBody Map<String, String> body) {
+        var denied = require(req, "admin");
+        if (denied != null) return denied;
+        if (body.getOrDefault("username", "").isBlank() || body.getOrDefault("password", "").length() < 8) {
+            return err(HttpStatus.BAD_REQUEST, "用户名必填且密码至少 8 位");
+        }
+        if (!ROLES.contains(body.get("role"))) return err(HttpStatus.BAD_REQUEST, "角色需为 admin/editor/viewer");
+        if (store.createUser(body.get("username"), store.encode(body.get("password")), body.get("role")) == 0) {
+            return err(HttpStatus.CONFLICT, "用户名已存在");
+        }
+        store.audit(user(req).username(), "create", "user/" + body.get("username"), "role=" + body.get("role"));
+        return ok(Map.of("ok", true));
+    }
+
+    @PutMapping("/api/users/{username}/role")
+    public ResponseEntity<?> userRole(HttpServletRequest req, @PathVariable String username, @RequestBody Map<String, String> body) {
+        var denied = require(req, "admin");
+        if (denied != null) return denied;
+        if (!ROLES.contains(body.get("role"))) return err(HttpStatus.BAD_REQUEST, "角色需为 admin/editor/viewer");
+        if (store.updateRole(username, body.get("role")) == 0) return err(HttpStatus.NOT_FOUND, "不存在");
+        store.audit(user(req).username(), "update", "user/" + username + "/role", body.get("role"));
+        return ok(Map.of("ok", true));
+    }
+
+    @PostMapping("/api/users/{username}/password")
+    public ResponseEntity<?> userResetPassword(HttpServletRequest req, @PathVariable String username, @RequestBody Map<String, String> body) {
+        var denied = require(req, "admin");
+        if (denied != null) return denied;
+        if (body.getOrDefault("newPassword", "").length() < 8) return err(HttpStatus.BAD_REQUEST, "新密码至少 8 位");
+        if (store.updatePassword(username, store.encode(body.get("newPassword"))) == 0) {
+            return err(HttpStatus.NOT_FOUND, "不存在");
+        }
+        store.audit(user(req).username(), "reset-password", "user/" + username, "");
+        return ok(Map.of("ok", true));
+    }
+
+    @DeleteMapping("/api/users/{username}")
+    public ResponseEntity<?> userDelete(HttpServletRequest req, @PathVariable String username) {
+        var denied = require(req, "admin");
+        if (denied != null) return denied;
+        String me = user(req).username();
+        if (me.equals(username)) return err(HttpStatus.BAD_REQUEST, "不能删除自己");
+        if (store.deleteUser(username) == 0) return err(HttpStatus.NOT_FOUND, "不存在");
+        store.audit(me, "delete", "user/" + username, "");
+        return ok(Map.of("ok", true));
+    }
+
+    // ---------- 会话设置（桥接模式下仅供展示；桥接会话由宿主管理） ----------
+
+    @GetMapping("/api/settings/session")
+    public ResponseEntity<?> sessionGet(HttpServletRequest req) {
+        var denied = require(req, "admin");
+        if (denied != null) return denied;
+        return ok(Map.of("ttlHours", store.sessionTtlHours()));
+    }
+
+    @PutMapping("/api/settings/session")
+    public ResponseEntity<?> sessionPut(HttpServletRequest req, @RequestBody Map<String, Integer> body) {
+        var denied = require(req, "admin");
+        if (denied != null) return denied;
+        Integer ttl = body.get("ttlHours");
+        if (ttl == null || ttl < 1 || ttl > 168) return err(HttpStatus.BAD_REQUEST, "会话时长需在 1-168 小时之间");
+        store.settingSet("session_ttl_hours", String.valueOf(ttl));
+        store.audit(user(req).username(), "update", "settings/session", ttl + "h");
+        return ok(Map.of("ttlHours", store.sessionTtlHours()));
+    }
+
+    // ---------- 内部 ----------
+
+    private static String str(Map<String, Object> m, String k) {
+        Object v = m.get(k);
+        return v == null ? "" : v.toString();
+    }
+
+    private static <T> ResponseEntity<T> ok(T body) { return ResponseEntity.ok(body); }
+
+    private static ResponseEntity<Map<String, String>> err(HttpStatus status, String msg) {
+        return ResponseEntity.status(status).body(Map.of("error", msg));
+    }
+
+    static Map<String, Object> healthBody() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("status", "ok");
+        m.put("mode", "bridged");
+        return m;
+    }
+}

@@ -1,6 +1,7 @@
 package com.xzsoft.sketchadmin;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -8,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import com.xzsoft.sketchadmin.oidc.OidcService;
 import com.xzsoft.sketchadmin.store.AdminStore;
 import com.xzsoft.sketchadmin.web.AdminApiController;
+import com.xzsoft.sketchadmin.web.AdminSessionBridge;
 import com.xzsoft.sketchadmin.web.SessionRegistry;
 
 /**
@@ -50,19 +52,29 @@ public class SketchAdminAutoConfiguration {
         return store;
     }
 
+    // 桥接模式（宿主提供 AdminSessionBridge Bean）：以下三 Bean 全部不注册——
+    // 管理端点由 AdminBridgeApiController 提供，登录/SSO 由宿主自己的认证体系承担
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(AdminSessionBridge.class)
     public SessionRegistry sessionRegistry(AdminStore store) { return new SessionRegistry(store); }
 
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(AdminSessionBridge.class)
     public OidcService oidcService(AdminStore store) { return new OidcService(store); }
 
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(AdminSessionBridge.class)
     public AdminApiController adminApiController(
             AdminStore store, SessionRegistry sessions, OidcService oidc) {
         return new AdminApiController(store, sessions, oidc);
+    }
+
+    /** 桥接模式（宿主提供 AdminSessionBridge）：只注册管理面端点，登录/SSO 由宿主认证承担 */
+    @Bean
+    @ConditionalOnBean(AdminSessionBridge.class)
+    public com.xzsoft.sketchadmin.web.AdminBridgeApiController adminBridgeApiController(
+            AdminStore store, AdminSessionBridge bridge) {
+        return new com.xzsoft.sketchadmin.web.AdminBridgeApiController(store, bridge);
     }
 
     private static void seedEnv(AdminStore store, String env, String key) {
