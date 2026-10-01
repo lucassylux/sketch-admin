@@ -174,7 +174,7 @@ public class Application {
                     protected Resource getResource(String resourcePath, Resource location) throws IOException {
                         Resource requested = location.createRelative(resourcePath);
                         // API 与静态资源直出；其余路径回退 SPA 入口（前端路由接管）
-                        if (resourcePath.startsWith("api/") || requested.exists()) {
+                        if (resourcePath.startsWith("api/") || resourcePath.startsWith("/api/") || requested.exists()) {
                             return requested;
                         }
                         return new ClassPathResource("/static/index.html");

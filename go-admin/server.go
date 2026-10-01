@@ -49,40 +49,54 @@ func (s *Server) Handler() http.Handler {
 
 // Register 把契约全量端点注册到外部 mux（业务项目挂同树共用会话与安全头；
 // 注意外部 mux 需自行套 withCommonHeaders，或用 Handler 组合）
-func (s *Server) Register(mux *http.ServeMux) {
+func (s *Server) Register(mux *http.ServeMux) { s.registerExcluding(mux, "") }
+
+// RegisterExcept 同 Register，但跳过指定方法+路径（宿主已有同名端点时避免冲突，
+// 如 goose-backup 的富信息 /api/health）
+func (s *Server) RegisterExcept(mux *http.ServeMux, skipMethodPath string) {
+	s.registerExcluding(mux, skipMethodPath)
+}
+
+func (s *Server) registerExcluding(mux *http.ServeMux, skip string) {
+	handle := func(methodPath string, h http.HandlerFunc) {
+		if methodPath == skip {
+			return
+		}
+		mux.HandleFunc(methodPath, h)
+	}
 	// 认证
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
+	handle("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
-	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
-	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
-	mux.HandleFunc("GET /api/auth/me", s.requireUI(s.handleMe))
-	mux.HandleFunc("POST /api/auth/password", s.requireUI(s.handleChangePassword))
+	handle("POST /api/auth/login", s.handleLogin)
+	handle("POST /api/auth/logout", s.handleLogout)
+	handle("GET /api/auth/me", s.requireUI(s.handleMe))
+	handle("POST /api/auth/password", s.requireUI(s.handleChangePassword))
 
 	// SSO/OIDC（未配置即休眠）
-	mux.HandleFunc("GET /api/auth/oidc/config", s.handleOidcConfig)
-	mux.HandleFunc("GET /api/auth/oidc/login", s.handleOidcLogin)
-	mux.HandleFunc("POST /api/auth/oidc/callback", s.handleOidcCallback)
-	mux.HandleFunc("GET /api/auth/oidc/settings", s.requireRole("admin", s.handleOidcSettingsGet))
-	mux.HandleFunc("PUT /api/auth/oidc/settings", s.requireRole("admin", s.handleOidcSettingsPut))
+	handle("GET /api/auth/oidc/config", s.handleOidcConfig)
+	handle("GET /api/auth/oidc/login", s.handleOidcLogin)
+	handle("POST /api/auth/oidc/callback", s.handleOidcCallback)
+	handle("GET /api/auth/oidc/settings", s.requireRole("admin", s.handleOidcSettingsGet))
+	handle("PUT /api/auth/oidc/settings", s.requireRole("admin", s.handleOidcSettingsPut))
 
 	// 会话设置
-	mux.HandleFunc("GET /api/settings/session", s.requireRole("admin", s.handleSessionSettingsGet))
-	mux.HandleFunc("PUT /api/settings/session", s.requireRole("admin", s.handleSessionSettingsPut))
+	handle("GET /api/settings/session", s.requireRole("admin", s.handleSessionSettingsGet))
+	handle("PUT /api/settings/session", s.requireRole("admin", s.handleSessionSettingsPut))
 
 	// 数据字典
-	mux.HandleFunc("GET /api/dict-types", s.requireUI(s.handleListDictTypes))
-	mux.HandleFunc("GET /api/dicts", s.requireUI(s.handleListDicts))
-	mux.HandleFunc("POST /api/dicts", s.requireRole("editor", s.handleSaveDict))
-	mux.HandleFunc("DELETE /api/dicts/{id}", s.requireRole("editor", s.handleDeleteDict))
+	handle("GET /api/dict-types", s.requireUI(s.handleListDictTypes))
+	handle("GET /api/dicts", s.requireUI(s.handleListDicts))
+	handle("POST /api/dicts", s.requireRole("editor", s.handleSaveDict))
+	handle("DELETE /api/dicts/{id}", s.requireRole("editor", s.handleDeleteDict))
 
 	// 审计与用户管理
-	mux.HandleFunc("GET /api/audit", s.requireRole("admin", s.handleAudit))
-	mux.HandleFunc("GET /api/users", s.requireRole("admin", s.handleListUsers))
-	mux.HandleFunc("POST /api/users", s.requireRole("admin", s.handleCreateUser))
-	mux.HandleFunc("PUT /api/users/{username}/role", s.requireRole("admin", s.handleUpdateUserRole))
-	mux.HandleFunc("POST /api/users/{username}/password", s.requireRole("admin", s.handleResetUserPassword))
-	mux.HandleFunc("DELETE /api/users/{username}", s.requireRole("admin", s.handleDeleteUser))
+	handle("GET /api/audit", s.requireRole("admin", s.handleAudit))
+	handle("GET /api/users", s.requireRole("admin", s.handleListUsers))
+	handle("POST /api/users", s.requireRole("admin", s.handleCreateUser))
+	handle("PUT /api/users/{username}/role", s.requireRole("admin", s.handleUpdateUserRole))
+	handle("POST /api/users/{username}/password", s.requireRole("admin", s.handleResetUserPassword))
+	handle("DELETE /api/users/{username}", s.requireRole("admin", s.handleDeleteUser))
 
 }
 
