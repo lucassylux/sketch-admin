@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -25,6 +26,66 @@ type Server struct {
 
 	mu       sync.Mutex
 	sessions map[string]session
+
+	// 登录防爆破：同 IP 连续失败达阈值锁定一段时间（成功清零；内存态单实例口径）
+	loginMu    sync.Mutex
+	loginFails map[string]*loginFailState
+}
+
+const (
+	loginFailThreshold = 5                // 连续失败 5 次
+	loginLockDuration  = 15 * time.Minute // 锁 15 分钟
+)
+
+type loginFailState struct {
+	count    int
+	lockedTo time.Time
+}
+
+// clientIP 取直连 IP（反代场景由宿主在 front 层注入信任的 X-Real-IP/X-Forwarded-For 时用之）
+func clientIP(r *http.Request) string {
+	if p := r.Header.Get("X-Real-IP"); p != "" {
+		return p
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func (s *Server) loginLocked(ip string) bool {
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	st, ok := s.loginFails[ip]
+	if !ok {
+		return false
+	}
+	return time.Now().Before(st.lockedTo)
+}
+
+func (s *Server) loginFailed(ip string) {
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	if s.loginFails == nil {
+		s.loginFails = map[string]*loginFailState{}
+	}
+	st, ok := s.loginFails[ip]
+	if !ok {
+		st = &loginFailState{}
+		s.loginFails[ip] = st
+	}
+	st.count++
+	if st.count >= loginFailThreshold {
+		st.lockedTo = time.Now().Add(loginLockDuration)
+		st.count = 0 // 锁定期满后重新计数
+	}
+}
+
+func (s *Server) loginSucceeded(ip string) {
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	delete(s.loginFails, ip)
 }
 
 type session struct {
@@ -162,12 +223,19 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &body) {
 		return
 	}
+	ip := clientIP(r)
+	if s.loginLocked(ip) {
+		writeErr(w, http.StatusTooManyRequests, "失败次数过多，账号已临时锁定（15 分钟）")
+		return
+	}
 	u, err := s.store.GetUser(body.Username)
 	if err != nil || !bcryptCompare(u.PasswordHash, body.Password) {
+		s.loginFailed(ip)
 		// 统一文案：防用户名枚举
 		writeErr(w, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
+	s.loginSucceeded(ip)
 	s.store.TouchLogin(u.Username)
 	s.issueSession(w, *u)
 	writeJSON(w, http.StatusOK, map[string]any{"username": u.Username, "role": u.Role})

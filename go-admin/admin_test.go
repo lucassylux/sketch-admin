@@ -309,3 +309,24 @@ func TestAuditTrail(t *testing.T) {
 		t.Fatalf("审计 actor: %v", list[0])
 	}
 }
+
+func TestLoginRateLimit(t *testing.T) {
+	app := newTestServer(t)
+	jar, _ := cookiejar.New(nil)
+	c := &http.Client{Jar: jar}
+	body, _ := json.Marshal(map[string]string{"username": "admin", "password": "wrong"})
+	for i := 1; i <= 5; i++ {
+		resp, _ := c.Post(app.srv.URL+"/api/auth/login", "application/json", bytes.NewReader(body))
+		resp.Body.Close()
+		if i < 5 && resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("第 %d 次应 401: %d", i, resp.StatusCode)
+		}
+	}
+	// 第 5 次失败后锁定：正确口令也 429
+	resp, _ := c.Post(app.srv.URL+"/api/auth/login", "application/json",
+		bytes.NewReader([]byte(`{"username":"admin","password":"`+app.adminPw+`"}`)))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("锁定后正确口令应 429，实得 %d", resp.StatusCode)
+	}
+}
