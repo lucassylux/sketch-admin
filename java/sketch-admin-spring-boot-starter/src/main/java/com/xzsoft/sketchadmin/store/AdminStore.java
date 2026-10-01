@@ -15,6 +15,9 @@ import java.util.Map;
 import java.util.UUID;
 import javax.sql.DataSource;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
@@ -25,7 +28,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 public class AdminStore implements AutoCloseable {
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ISO_INSTANT;
-    private final Connection conn;
+    private final DataSource dataSource;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
     /** H2 单文件模式（零运维默认） */
@@ -33,16 +36,29 @@ public class AdminStore implements AutoCloseable {
         this("jdbc:h2:file:" + normalizeH2Path(dbPath) + ";MODE=MySQL;AUTO_SERVER=TRUE", "sa", "", "org.h2.Driver");
     }
 
-    /** 通用 JDBC（MySQL 等）——由 starter 配置 sketch-admin.jdbc-* 注入 */
+    /**
+     * 通用 JDBC（MySQL 等）——由 starter 配置 sketch-admin.jdbc-* 注入。
+     * 连接池化（Hikari，classpath 缺失时退 DriverManager）+ 每次操作借还连接：
+     * Tomcat 多线程共享单条 JDBC 连接会协议错乱（MySQL Connector/J 非线程安全，
+     * 连接被标记关闭后全部请求报 "No operations allowed after connection closed"）
+     */
     public AdminStore(String jdbcUrl, String username, String password, String driverClass) {
         try {
-            DriverManagerDataSource ds = new DriverManagerDataSource(jdbcUrl, username, password);
+            HikariConfig hc = new HikariConfig();
+            hc.setJdbcUrl(jdbcUrl);
+            hc.setUsername(username);
+            hc.setPassword(password);
             if (driverClass != null && !driverClass.isBlank()) {
-                ds.setDriverClassName(driverClass);
+                hc.setDriverClassName(driverClass);
             }
-            conn = ds.getConnection();
-            migrate();
-            seed();
+            hc.setMaximumPoolSize(4);
+            hc.setMinimumIdle(1);
+            hc.setPoolName("sketch-admin");
+            this.dataSource = new HikariDataSource(hc);
+            try (Connection c = dataSource.getConnection()) {
+                migrate(c);
+                seed(c);
+            }
         } catch (SQLException e) {
             throw new IllegalStateException("管理库初始化失败: " + e.getMessage(), e);
         }
@@ -54,7 +70,7 @@ public class AdminStore implements AutoCloseable {
                 ? dbPath : "./" + dbPath;
     }
 
-    private void migrate() throws SQLException {
+    private void migrate(Connection conn) throws SQLException {
         String[] ddl = {
             "CREATE TABLE IF NOT EXISTS users(" +
                 "username VARCHAR(64) PRIMARY KEY, password_hash VARCHAR(100) NOT NULL," +
@@ -75,7 +91,7 @@ public class AdminStore implements AutoCloseable {
         }
     }
 
-    private void seed() throws SQLException {
+    private void seed(Connection conn) throws SQLException {
         long userCount = count("users");
         String generated = null;
         if (userCount == 0) {
@@ -246,7 +262,7 @@ public class AdminStore implements AutoCloseable {
     }
 
     private int update(String sql, Object... args) {
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             bind(ps, args);
             return ps.executeUpdate();
         } catch (SQLException e) {
@@ -255,7 +271,7 @@ public class AdminStore implements AutoCloseable {
     }
 
     private Object queryScalar(String sql, Object... args) {
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             bind(ps, args);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getObject(1) : null;
@@ -272,7 +288,7 @@ public class AdminStore implements AutoCloseable {
 
     private List<Map<String, Object>> queryList(String sql, Object... args) {
         List<Map<String, Object>> out = new ArrayList<>();
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+        try (Connection c = dataSource.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             bind(ps, args);
             try (ResultSet rs = ps.executeQuery()) {
                 int cols = rs.getMetaData().getColumnCount();
@@ -311,6 +327,8 @@ public class AdminStore implements AutoCloseable {
 
     @Override
     public void close() {
-        try { conn.close(); } catch (SQLException ignored) { }
+        if (dataSource instanceof HikariDataSource h) {
+            h.close();
+        }
     }
 }
