@@ -2,6 +2,7 @@
 # sketch-admin 脚手架：从模板生成新项目（替换品牌占位符 + 拷贝所选后端骨架）
 # 用法: ./init.sh <app-name> <应用名> <副标题> <目标目录> <go|java>
 set -euo pipefail
+PYTHON="$(command -v python || command -v python3)"
 
 APP_NAME="${1:?用法: ./init.sh <app-name> <应用名> <副标题> <目标目录> <go|java>}"
 TITLE="${2:?缺应用名}"
@@ -10,12 +11,13 @@ DEST="${4:?缺目标目录}"
 BACKEND="${5:?后端选 go 或 java}"
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+APP_PKG="${APP_NAME//-/}"
 
 # 1) 前端模板拷贝 + 品牌替换
 mkdir -p "$DEST"
 cp -r "$ROOT/web" "$DEST/web"
 rm -rf "$DEST/web/node_modules" "$DEST/web/dist"
-python3 - "$DEST" "$APP_NAME" "$TITLE" "$TAGLINE" <<'PY'
+"$PYTHON" - "$DEST" "$APP_NAME" "$TITLE" "$TAGLINE" <<'PY'
 import sys, pathlib, json, re
 
 dest, app_name, title, tagline = sys.argv[1:5]
@@ -91,7 +93,7 @@ EOF
     echo "go 骨架就绪：cd $DEST/server && go mod tidy（replace 指向本仓库 go-admin 或发版后用版本号）"
     ;;
   java)
-    mkdir -p "$DEST/server"
+    mkdir -p "$DEST/server/src/main/java/$APP_PKG" "$DEST/server/src/main/resources/static"
     cat > "$DEST/server/pom.xml" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0">
@@ -99,11 +101,24 @@ EOF
   <groupId>com.example</groupId>
   <artifactId>$APP_NAME-server</artifactId>
   <version>0.1.0</version>
+  <description>$TITLE 后端（sketch-admin Java starter）</description>
   <properties>
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <spring-boot.version>3.4.5</spring-boot.version>
   </properties>
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>\${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
   <dependencies>
     <dependency>
       <groupId>com.xzsoft</groupId>
@@ -111,17 +126,77 @@ EOF
       <version>0.1.0</version>
     </dependency>
   </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>\${spring-boot.version}</version>
+        <executions><execution><goals><goal>repackage</goal></goals></execution></executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
 EOF
-    mkdir -p "$DEST/server/src/main/resources" "$DEST/server/src/main/java"
+    cat > "$DEST/server/src/main/java/$APP_PKG/Application.java" <<EOF
+package $APP_PKG;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.servlet.resource.PathResourceResolver;
+
+import java.io.IOException;
+
+/**
+ * $Title 后端：引 sketch-admin starter 即得全套管理端点；业务 @RestController 照常加。
+ * 前端产物放 src/main/resources/static（npm run build 后拷入），SPA 路由回退到 index.html。
+ */
+@SpringBootApplication
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+
+    @Configuration
+    static class SpaFallbackConfig implements WebMvcConfigurer {
+        @Override
+        public void addResourceHandlers(ResourceHandlerRegistry registry) {
+            registry.addResourceHandler("/**")
+                .addResourceLocations("classpath:/static/")
+                .resourceChain(true)
+                .addResolver(new PathResourceResolver() {
+                    @Override
+                    protected Resource getResource(String resourcePath, Resource location) throws IOException {
+                        Resource requested = location.createRelative(resourcePath);
+                        // API 与静态资源直出；其余路径回退 SPA 入口（前端路由接管）
+                        if (resourcePath.startsWith("api/") || requested.exists()) {
+                            return requested;
+                        }
+                        return new ClassPathResource("/static/index.html");
+                    }
+                });
+        }
+    }
+}
+EOF
     cat > "$DEST/server/src/main/resources/application.yml" <<EOF
 server:
   port: 8280
 sketch-admin:
-  db-path: data/admin
+  db-path: data/$APP_NAME-admin
   # seed-admin-password: 留空则随机生成并日志打印一次
 EOF
-    echo "java 骨架就绪：cd $DEST/server（先 mvn install 本仓库 starter，或发布到私服后引用）"
+    # 前端产物内嵌（若已构建）
+    if [ -d "$DEST/web/dist" ] && [ -f "$DEST/web/dist/index.html" ]; then
+      cp -r "$DEST/web/dist/." "$DEST/server/src/main/resources/static/"
+      echo "已内嵌前端产物"
+    fi
+    echo "java 骨架就绪：cd $DEST/server && mvn package（先 mvn install 本仓库 starter，或发布私服后引用）"
     ;;
   *)
     echo "后端只支持 go|java" >&2; exit 1;;
