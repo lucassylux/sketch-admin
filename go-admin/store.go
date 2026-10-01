@@ -260,6 +260,14 @@ func (s *Store) DeleteUser(username string) error {
 	return nil
 }
 
+// ImportLocalUser 导入本地账号（存量迁移：bcrypt 哈希直接搬入，不从明文生成）
+func (s *Store) ImportLocalUser(username, passwordHash, role string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO users(username, password_hash, role, created_at) VALUES(?,?,?,?)`,
+		username, passwordHash, role, now())
+	return err
+}
+
 // ResetAdminPassword 管理员口令重置（CLI 恢复通道）：账号必须存在
 func (s *Store) ResetAdminPassword(username, password string) error {
 	hash, err := bcryptHash(password)
