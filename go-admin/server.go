@@ -225,6 +225,11 @@ func (s *Server) issueSession(w http.ResponseWriter, u User) {
 // Authenticate 解析请求的会话用户（业务端点复用；未登录返回 nil）
 func (s *Server) Authenticate(r *http.Request) *User { return s.sessionUser(r) }
 
+// Audit 业务端点写审计（与 admin 面操作同一张审计表，前端「审计日志」页统一可见）
+func (s *Server) Audit(actor, action, entity, detail string) {
+	_ = s.store.Audit(actor, action, entity, detail)
+}
+
 // RequireUI 业务端点用的会话守卫（未登录 401 JSON，与契约错误格式一致）
 func (s *Server) RequireUI(next func(w http.ResponseWriter, r *http.Request, u *User)) http.HandlerFunc {
 	return s.requireUI(next)
