@@ -153,7 +153,7 @@ import org.springframework.web.servlet.resource.PathResourceResolver;
 import java.io.IOException;
 
 /**
- * $Title 后端：引 sketch-admin starter 即得全套管理端点；业务 @RestController 照常加。
+ * $TITLE 后端：引 sketch-admin starter 即得全套管理端点；业务 @RestController 照常加。
  * 前端产物放 src/main/resources/static（npm run build 后拷入），SPA 路由回退到 index.html。
  */
 @SpringBootApplication
