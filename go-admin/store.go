@@ -260,6 +260,15 @@ func (s *Store) DeleteUser(username string) error {
 	return nil
 }
 
+// ResetAdminPassword 管理员口令重置（CLI 恢复通道）：账号必须存在
+func (s *Store) ResetAdminPassword(username, password string) error {
+	hash, err := bcryptHash(password)
+	if err != nil {
+		return err
+	}
+	return s.UpdatePassword(username, hash)
+}
+
 // AdminCount 除指定用户外的现存 admin 数（删除/降级保护用）
 func (s *Store) AdminCount(exclude string) int {
 	var n int
