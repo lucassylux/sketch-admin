@@ -1,0 +1,58 @@
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; margin: 0; }
+body {
+  font-family: ui-sans-serif, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--sk-bg-pattern, none), var(--sk-paper, #f5f6f8);
+  color: var(--sk-text, #222);
+}
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.cell-break {
+  display: block;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.5;
+}
+/* 长单token内容（正则、实体名）：不换行省略号，悬停 title 看全量 */
+.cell-clip {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+pre.code {
+  margin: 0;
+  padding: 12px;
+  max-height: 420px;
+  overflow: auto;
+  background: var(--sk-bg-muted, #f0f1f3);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ── 列表页卡片占满内容区：表体内部滚动（数据少时卡片不再缩成一截）──
+ * 高度链：content(flex:1) > 页面根(height:100%) > .fill-card(height:100%) > sk-table-wrap(flex:1) 内部滚动
+ * （与看门鹅管理台同款实现） */
+.fill-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.fill-card > .sk-card-title {
+  flex: none;
+}
+.fill-card > .sk-form {
+  flex: none;
+}
+.fill-card > .sk-table-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 页面根占满（fill-card 高度链第一环：content > .page-fill > .fill-card） */
+.page-fill { height: 100%; }

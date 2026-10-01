@@ -1,0 +1,9 @@
+server:
+  port: 8380
+
+sketch-admin:
+  db-path: data/demo-admin    # H2 单文件
+  seed-admin-password: "Demo-Admin#2026"
+
+# SSO（可选；首启注入后可在设置页改）
+# SK_ADMIN_OIDC_ISSUER / CLIENT_ID / CLIENT_SECRET / ALLOWED_USERS 环境变量亦可
