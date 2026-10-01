@@ -25,7 +25,10 @@ public class SketchAdminAutoConfiguration {
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean
     public AdminStore adminStore(SketchAdminProperties props) {
-        AdminStore store = new AdminStore(props.dbPath());
+        // 外部数据库（MySQL 等）优先；未配置则回落 H2 单文件
+        AdminStore store = (props.jdbcUrl() != null && !props.jdbcUrl().isBlank())
+                ? new AdminStore(props.jdbcUrl(), props.jdbcUsername(), props.jdbcPassword(), null)
+                : new AdminStore(props.dbPath());
         // 环境变量首启注入（settings 已有值不覆盖）
         seedEnv(store, "SK_ADMIN_OIDC_ISSUER", "oidc_issuer");
         seedEnv(store, "SK_ADMIN_OIDC_CLIENT_ID", "oidc_client_id");

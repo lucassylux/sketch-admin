@@ -28,20 +28,30 @@ public class AdminStore implements AutoCloseable {
     private final Connection conn;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
+    /** H2 单文件模式（零运维默认） */
     public AdminStore(String dbPath) {
+        this("jdbc:h2:file:" + normalizeH2Path(dbPath) + ";MODE=MySQL;AUTO_SERVER=TRUE", "sa", "", "org.h2.Driver");
+    }
+
+    /** 通用 JDBC（MySQL 等）——由 starter 配置 sketch-admin.jdbc-* 注入 */
+    public AdminStore(String jdbcUrl, String username, String password, String driverClass) {
         try {
-            String normalized = dbPath.startsWith("/") || dbPath.startsWith("\\")
-                    || dbPath.matches("^[A-Za-z]:.*") || dbPath.startsWith("~/") || dbPath.startsWith("./")
-                    ? dbPath : "./" + dbPath;
-        DriverManagerDataSource ds = new DriverManagerDataSource(
-                "jdbc:h2:file:" + normalized + ";MODE=MySQL;AUTO_SERVER=TRUE", "sa", "");
-            ds.setDriverClassName("org.h2.Driver");
+            DriverManagerDataSource ds = new DriverManagerDataSource(jdbcUrl, username, password);
+            if (driverClass != null && !driverClass.isBlank()) {
+                ds.setDriverClassName(driverClass);
+            }
             conn = ds.getConnection();
             migrate();
             seed();
         } catch (SQLException e) {
             throw new IllegalStateException("管理库初始化失败: " + e.getMessage(), e);
         }
+    }
+
+    private static String normalizeH2Path(String dbPath) {
+        return dbPath.startsWith("/") || dbPath.startsWith("\\")
+                || dbPath.matches("^[A-Za-z]:.*") || dbPath.startsWith("~/") || dbPath.startsWith("./")
+                ? dbPath : "./" + dbPath;
     }
 
     private void migrate() throws SQLException {
@@ -52,9 +62,9 @@ public class AdminStore implements AutoCloseable {
                 "last_login_at VARCHAR(40) NOT NULL DEFAULT '', created_at VARCHAR(40) NOT NULL)",
             "CREATE TABLE IF NOT EXISTS dicts(" +
                 "id BIGINT AUTO_INCREMENT PRIMARY KEY, dict_type VARCHAR(100) NOT NULL," +
-                "label VARCHAR(100) NOT NULL, \"value\" VARCHAR(100) NOT NULL, sort INT NOT NULL DEFAULT 0," +
+                "label VARCHAR(100) NOT NULL, `value` VARCHAR(100) NOT NULL, sort INT NOT NULL DEFAULT 0," +
                 "enabled INT NOT NULL DEFAULT 1, created_at VARCHAR(40) NOT NULL," +
-                "CONSTRAINT uk_dicts UNIQUE (dict_type, \"value\"))",
+                "CONSTRAINT uk_dicts UNIQUE (dict_type, `value`))",
             "CREATE TABLE IF NOT EXISTS audit(" +
                 "id BIGINT AUTO_INCREMENT PRIMARY KEY, at VARCHAR(40) NOT NULL, actor VARCHAR(64) NOT NULL," +
                 "action VARCHAR(50) NOT NULL, entity VARCHAR(200) NOT NULL, detail VARCHAR(500) NOT NULL DEFAULT '')",
@@ -82,7 +92,7 @@ public class AdminStore implements AutoCloseable {
                 {"rule-severity", "低", "low", "4"},
             };
             for (String[] d : seed) {
-                update("INSERT INTO dicts(dict_type,label,\"value\",sort,enabled,created_at) VALUES(?,?,?,?,1,?)",
+                update("INSERT INTO dicts(dict_type,label,`value`,sort,enabled,created_at) VALUES(?,?,?,?,1,?)",
                         d[0], d[1], d[2], Integer.parseInt(d[3]), now());
             }
         }
@@ -166,19 +176,19 @@ public class AdminStore implements AutoCloseable {
 
     public List<Map<String, Object>> listDicts(String type, boolean onlyEnabled) {
         if (onlyEnabled) {
-            return queryList("SELECT id,dict_type,label,\"value\",sort,enabled FROM dicts WHERE dict_type=? AND enabled=1 ORDER BY sort,id", type);
+            return queryList("SELECT id,dict_type,label,`value`,sort,enabled FROM dicts WHERE dict_type=? AND enabled=1 ORDER BY sort,id", type);
         }
-        return queryList("SELECT id,dict_type,label,\"value\",sort,enabled FROM dicts WHERE dict_type=? ORDER BY sort,id", type);
+        return queryList("SELECT id,dict_type,label,`value`,sort,enabled FROM dicts WHERE dict_type=? ORDER BY sort,id", type);
     }
 
     /** 新增或更新字典项；同类型 value 冲突抛 IllegalArgumentException */
     public Map<String, Object> saveDict(Long id, String type, String label, String value, int sort, boolean enabled) {
         try {
             if (id == null || id == 0) {
-                update("INSERT INTO dicts(dict_type,label,\"value\",sort,enabled,created_at) VALUES(?,?,?,?,?,?)",
+                update("INSERT INTO dicts(dict_type,label,`value`,sort,enabled,created_at) VALUES(?,?,?,?,?,?)",
                         type, label, value, sort, enabled ? 1 : 0, now());
             } else {
-                update("UPDATE dicts SET dict_type=?,label=?,\"value\"=?,sort=?,enabled=? WHERE id=?",
+                update("UPDATE dicts SET dict_type=?,label=?,`value`=?,sort=?,enabled=? WHERE id=?",
                         type, label, value, sort, enabled ? 1 : 0, id);
             }
         } catch (RuntimeException e) {
@@ -213,7 +223,7 @@ public class AdminStore implements AutoCloseable {
     }
 
     public void settingSet(String key, String value) {
-        update("MERGE INTO settings(setting_key,setting_value) VALUES(?,?)", key, value);
+        update("INSERT INTO settings(setting_key,setting_value) VALUES(?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)", key, value);
     }
 
     /** 会话时长（1-168；缺省/非法回退 12） */

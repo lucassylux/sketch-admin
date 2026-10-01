@@ -42,6 +42,12 @@
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
     </dependency>
+    <!-- 外部 MySQL（sketch-admin.jdbc-url 配置时使用；H2 默认场景不加载） -->
+    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <scope>runtime</scope>
+    </dependency>
     <!-- OIDC：授权码 + PKCE + ID token 校验（与 go-admin 的 go-oidc 同源语义） -->
     <dependency>
       <groupId>org.springframework.security</groupId>
