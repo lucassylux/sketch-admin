@@ -191,6 +191,8 @@ public class AdminBridgeApiController {
         return ok(Map.of(
                 "logoSvg", store.settingGet("brand_logo_svg"),
                 "iconSvg", store.settingGet("brand_icon_svg"),
+                "appName", store.settingGet("brand_app_name"),
+                "tagline", store.settingGet("brand_tagline"),
                 "copyrightText", store.settingGet("brand_copyright_text")));
     }
 
@@ -200,15 +202,21 @@ public class AdminBridgeApiController {
         if (denied != null) return denied;
         String logo = body.getOrDefault("logoSvg", "");
         String icon = body.getOrDefault("iconSvg", "");
+        String appName = body.getOrDefault("appName", "");
+        String tagline = body.getOrDefault("tagline", "");
         String copyright = body.getOrDefault("copyrightText", "");
         if (logo.length() > 20000 || icon.length() > 20000) return err(HttpStatus.BAD_REQUEST, "SVG 过大（各 ≤20KB）");
-        if (copyright.length() > 200) return err(HttpStatus.BAD_REQUEST, "版权文案过长（≤200 字符）");
+        if (appName.length() > 64 || tagline.length() > 128 || copyright.length() > 200) {
+            return err(HttpStatus.BAD_REQUEST, "文案过长（应用名 ≤64 / 副标题 ≤128 / 版权 ≤200 字符）");
+        }
         store.settingSet("brand_logo_svg", logo);
         store.settingSet("brand_icon_svg", icon);
+        store.settingSet("brand_app_name", appName);
+        store.settingSet("brand_tagline", tagline);
         store.settingSet("brand_copyright_text", copyright);
         store.audit(user(req).username(), "update", "settings/brand",
                 "logo=" + (logo.isBlank() ? "reset" : "custom") + ",icon=" + (icon.isBlank() ? "reset" : "custom") + ",copyright=" + (copyright.isBlank() ? "reset" : "custom"));
-        return ok(Map.of("logoSvg", logo, "iconSvg", icon, "copyrightText", copyright));
+        return ok(Map.of("logoSvg", logo, "iconSvg", icon, "appName", appName, "tagline", tagline, "copyrightText", copyright));
     }
 
     // ---------- 内部 ----------
