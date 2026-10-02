@@ -29,6 +29,7 @@ for p in web.rglob('*'):
         s = p.read_text(encoding='utf-8')
         s2 = (s.replace('{{APP_NAME}}', title)
                 .replace('{{APP_TAGLINE}}', tagline)
+                .replace('{{APP_BIN}}', app_name)
                 .replace('{{app-name}}', app_name))
         if s2 != s:
             p.write_text(s2, encoding='utf-8')

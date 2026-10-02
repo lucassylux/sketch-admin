@@ -1,6 +1,5 @@
 <template>
   <div class="login-page">
-    <div class="top-actions"><SkThemeSwitch /></div>
     <div class="box">
       <div class="hero">
         <BrandLogo :size="56" />
@@ -31,22 +30,42 @@
             SSO 登录
           </SkButton>
         </template>
+        <div class="helper">
+          <span class="sk-link" @click="forgotOpen = true">忘记密码？</span>
+        </div>
       </div>
 
-      <div class="foot">© {{ year }} LeakGoose · v{{ version }}</div>
+      <div class="foot">© {{ year }} {{ APP_NAME }} · {{ APP_TAGLINE }}</div>
     </div>
+
+    <!-- 忘记密码：CLI 重置（Go 骨架）；Java 骨架口径见列表末条 -->
+    <SkModal v-model:open="forgotOpen" title="重置密码" width="600px">
+      <p class="reset-tip">在<b>运行本服务的机器</b>上，进入程序所在目录，执行以下命令即可重置密码：</p>
+      <div class="cmd-block">
+        <code>./{{ APP_BIN }} resetpass -u admin -p 新密码</code>
+        <SkButton size="sm" variant="primary" @click="copyCmd">复制</SkButton>
+      </div>
+      <ul class="reset-list">
+        <li><code>-u</code> 用户名（默认 <code>admin</code>，忘记用户名时会列出已有用户）</li>
+        <li><code>-p</code> 新密码（至少 8 位）</li>
+        <li>重置后立即生效，服务无需重启，直接用新密码登录</li>
+        <li>Java 后端：停止服务删除 data/ 下管理库文件后重启，按 seed 口令（日志打印一次）重新登录并重建用户</li>
+      </ul>
+      <template #footer>
+        <SkButton @click="forgotOpen = false">关闭</SkButton>
+      </template>
+    </SkModal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { APP_NAME, APP_TAGLINE } from '../brand'
+import { APP_NAME, APP_TAGLINE, APP_BIN } from '../brand'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { skMessage } from '@xzsoft/sketch-ui'
 import BrandLogo from '../components/BrandLogo.vue'
 import { api, type Me } from '../api'
 import { markSession } from '../router'
-import { version } from '../../package.json'
 
 const router = useRouter()
 const route = useRoute()
@@ -55,6 +74,16 @@ const loading = ref(false)
 const username = ref('')
 const password = ref('')
 const ssoEnabled = ref(false)
+const forgotOpen = ref(false)
+
+const copyCmd = async () => {
+  try {
+    await navigator.clipboard.writeText(`./${APP_BIN} resetpass -u admin -p 新密码`)
+    skMessage.success('已复制')
+  } catch {
+    skMessage.error('复制失败')
+  }
+}
 
 // 探测 SSO 可用性：后端未配置 OIDC 时按钮不出现，本地登录不受影响
 onMounted(async () => {
@@ -97,13 +126,6 @@ const doLogin = async () => {
   background-size: var(--sk-bg-pattern-size, auto), auto;
 }
 
-/* 右上角主题切换（与看门鹅登录页同款） */
-.top-actions {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 10;
-}
 .box { width: 380px; position: relative; z-index: 1; }
 .hero { display: flex; justify-content: center; margin-bottom: 14px; }
 .headline {
@@ -125,7 +147,17 @@ const doLogin = async () => {
   margin: 16px 0; color: var(--sk-text-faint, #aaa); font-size: var(--sk-font-size-xs, 12px);
 }
 .divider::before, .divider::after { content: ''; flex: 1; border-top: var(--sk-border-divider, 1px solid #e5e7eb); }
+.helper { margin-top: 12px; text-align: center; font-size: var(--sk-font-size-xs); }
 .sso-icon { width: 14px; height: 14px; }
+
+.reset-tip { font-size: 13px; color: var(--sk-text); margin-bottom: 10px; }
+.cmd-block {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--sk-surface-alt, #f6f6f2); border-radius: 8px; padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.cmd-block code { flex: 1; font-family: var(--sk-font-mono, monospace); font-size: 12.5px; word-break: break-all; }
+.reset-list { margin: 0; padding-left: 18px; color: var(--sk-text-muted); font-size: 12.5px; line-height: 1.9; }
 
 /* 页脚与看门鹅登录页同款：11px / 字距 2px */
 .foot {
