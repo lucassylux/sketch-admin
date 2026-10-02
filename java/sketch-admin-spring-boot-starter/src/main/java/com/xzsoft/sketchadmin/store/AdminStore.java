@@ -242,13 +242,19 @@ public class AdminStore implements AutoCloseable {
         update("INSERT INTO settings(setting_key,setting_value) VALUES(?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)", key, value);
     }
 
-    /** 会话时长（1-168；缺省/非法回退 12） */
-    public int sessionTtlHours() {
+    /** 会话时长（秒；缺省/非法回退 12 小时）。存储键 session_ttl_seconds，
+     *  旧 session_ttl_hours 自动迁移（×3600），改设置时写新键。 */
+    public int sessionTtlSeconds() {
         try {
-            int v = Integer.parseInt(settingGet("session_ttl_hours").trim());
-            return (v >= 1 && v <= 168) ? v : 12;
+            String v = settingGet("session_ttl_seconds");
+            if (v.isEmpty()) {
+                String legacy = settingGet("session_ttl_hours");
+                return legacy.isEmpty() ? 12 * 3600 : Math.max(1, Integer.parseInt(legacy.trim())) * 3600;
+            }
+            int sec = Integer.parseInt(v.trim());
+            return (sec >= 60 && sec <= 365 * 86400) ? sec : 12 * 3600;
         } catch (Exception e) {
-            return 12;
+            return 12 * 3600;
         }
     }
 

@@ -24,7 +24,7 @@ public class SessionRegistry {
     /** 签发会话，返回 token（由 controller 写 cookie） */
     public String issue(String username, String role, String subject) {
         String token = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
-        Instant expires = Instant.now().plus(Duration.ofHours(store.sessionTtlHours()));
+        Instant expires = Instant.now().plus(Duration.ofSeconds(store.sessionTtlSeconds()));
         sessions.put(token, new Sess(username, role, subject, expires));
         return token;
     }
@@ -43,5 +43,5 @@ public class SessionRegistry {
         if (token != null) sessions.remove(token);
     }
 
-    public int ttlSeconds() { return store.sessionTtlHours() * 3600; }
+    public int ttlSeconds() { return store.sessionTtlSeconds(); }
 }

@@ -170,18 +170,18 @@ public class AdminBridgeApiController {
     public ResponseEntity<?> sessionGet(HttpServletRequest req) {
         var denied = require(req, "admin");
         if (denied != null) return denied;
-        return ok(Map.of("ttlHours", store.sessionTtlHours()));
+        return ok(Map.of("ttlSeconds", store.sessionTtlSeconds()));
     }
 
     @PutMapping("/api/settings/session")
     public ResponseEntity<?> sessionPut(HttpServletRequest req, @RequestBody Map<String, Integer> body) {
         var denied = require(req, "admin");
         if (denied != null) return denied;
-        Integer ttl = body.get("ttlHours");
-        if (ttl == null || ttl < 1 || ttl > 168) return err(HttpStatus.BAD_REQUEST, "会话时长需在 1-168 小时之间");
-        store.settingSet("session_ttl_hours", String.valueOf(ttl));
-        store.audit(user(req).username(), "update", "settings/session", ttl + "h");
-        return ok(Map.of("ttlHours", store.sessionTtlHours()));
+        Integer ttl = body.get("ttlSeconds");
+        if (ttl == null || ttl < 60 || ttl > 365 * 86400) return err(HttpStatus.BAD_REQUEST, "会话时长需在 1 分钟 - 365 天之间（秒）");
+        store.settingSet("session_ttl_seconds", String.valueOf(ttl));
+        store.audit(user(req).username(), "update", "settings/session", ttl + "s");
+        return ok(Map.of("ttlSeconds", store.sessionTtlSeconds()));
     }
 
     // ---------- 品牌外观（登录页 logo / 页脚文案；GET 登录前公开读，PUT admin） ----------

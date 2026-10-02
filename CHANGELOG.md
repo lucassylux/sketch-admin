@@ -64,3 +64,8 @@
 - OidcService 增强：完整回调地址 oidc_redirect_uri 覆盖（SPA 回调路径非 /oidc/callback 时用）、
   scope 可配（oidc_scopes）、白名单支持 `*` 全放行；OidcService Bean 改两模式共用
 - 桥接回调同名不拒：SSO 身份与本地账号同名时跳过落库直接签发（用户体系在宿主/IdP 侧）
+
+## 0.2.6（2026-10-02）
+
+- 会话时长改为**秒**口径：存储键 session_ttl_seconds、GET/PUT 返回/接收 ttlSeconds、
+  SessionRegistry 运行时按秒；旧 session_ttl_hours 自动迁移（×3600），缺省 12 小时
