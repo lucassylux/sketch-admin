@@ -47,3 +47,10 @@
 
 - 品牌字段再扩：`appName`（应用名称，登录页标题/侧边栏/浏览器标签）+ `tagline`（副标题）；
   长度校验 应用名≤64 / 副标题≤128 / 版权≤200
+
+### lettermark 通用兜底
+
+- 新增 `web/src/utils/brandMark.ts`：品牌读取 + SVG 白名单消毒 + 首字标生成
+  （Logo 未配置时按应用名首字动态生成 SVG 徽标，favicon 同样适用）
+- BrandLogo / 登录页 / 侧边栏 / 系统设置"品牌信息"页全部接入：配置 SVG 优先，
+  空则 lettermark（应用名 → 占位符名 → 首字符）

@@ -11,7 +11,7 @@
       <template #brand>
         <span class="brand-click" @click="goPage('/users')">
           <BrandLogo :size="28" />
-          <span class="sk-sidebar-brand-text">{{ APP_NAME }} 管理后台</span>
+          <span class="sk-sidebar-brand-text">{{ sidebarName }}</span>
         </span>
       </template>
 
@@ -71,6 +71,7 @@
 
 <script setup lang="ts">
 import { APP_NAME } from '../brand'
+import { loadBrand, useBrand } from '../utils/brandMark'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -91,6 +92,10 @@ const router = useRouter()
 // 展示名只读本地非敏感标记（登录时写入）：外壳不发认证请求——
 // 否则未登录时 401 → 拦截器整页跳 /login → 外壳再挂载再 401，形成刷新死循环。
 // 外壳仅在登录后的路由层级挂载，setup 时读一次即可
+const brand = useBrand()
+void loadBrand()
+const sidebarName = computed(() => (brand.value.appName || APP_NAME) + ' 管理后台')
+
 const me = ref<Me | null>(null)
 {
   const username = localStorage.getItem('lg_center_user')

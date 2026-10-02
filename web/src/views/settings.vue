@@ -72,6 +72,57 @@
       </div>
 
       <!-- ===== 关于 ===== -->
+      <!-- ===== 品牌信息：Logo/应用名/副标题/版权（GET 公开读、PUT admin——starter 契约端点） ===== -->
+      <div v-else-if="activeTab === 'brand'">
+        <SkAlert v-if="!me || me.role !== 'admin'" tone="warning">仅管理员可维护品牌信息</SkAlert>
+        <template v-else>
+          <!-- 场景预览：登录页模拟 + 小尺寸场景，同源即时更新 -->
+          <div class="brand-scene">
+            <div class="brand-scene-login">
+              <div class="brand-scene-logo" v-html="previewLogoHtml"></div>
+              <div class="brand-scene-title">{{ brandForm.appName || APP_NAME }}</div>
+              <div class="brand-scene-sub">{{ brandForm.tagline || APP_TAGLINE }}</div>
+              <div class="brand-scene-foot">{{ copyrightPreview }}</div>
+            </div>
+            <div class="brand-scene-col">
+              <div class="brand-scene-item">
+                <span class="brand-scene-icon" v-html="previewLogoHtml"></span>
+                <span class="brand-scene-item-label">侧边栏 · 28px</span>
+              </div>
+              <div class="brand-scene-item">
+                <span class="brand-scene-fav" v-html="previewLogoHtml"></span>
+                <span class="brand-scene-item-label">浏览器页签 · 16px</span>
+              </div>
+            </div>
+          </div>
+
+          <SkForm style="width: 100%">
+            <SkFormField name="appName" label="应用名称"
+              hint="登录页标题、侧边栏品牌文字与浏览器标签标题；留空恢复默认">
+              <SkInput v-model="brandForm.appName" :maxlength="64" placeholder="应用名" />
+            </SkFormField>
+            <SkFormField name="tagline" label="副标题"
+              hint="登录页应用名下方的一句话说明；留空恢复默认">
+              <SkInput v-model="brandForm.tagline" :maxlength="128" placeholder="一句话副标题" />
+            </SkFormField>
+            <SkFormField name="logoSvg" label="Logo（SVG 源码）"
+              hint="登录页 / 侧边栏 / 浏览器页签三处共用；建议简洁图形（小到 16px 仍可辨认）。留空按应用名首字生成徽标；渲染前白名单消毒">
+              <LgTextarea v-model="brandForm.logoSvg" :rows="6" spellcheck="false"
+                placeholder='<svg viewBox="0 0 512 512">…</svg>' class="mono" />
+            </SkFormField>
+            <SkFormField name="copyrightText" label="版权文案"
+              hint="登录页底部版权行；留空恢复默认（© 年份 应用名 · 副标题）">
+              <LgTextarea v-model="brandForm.copyrightText" :rows="2" :maxlength="200" spellcheck="false"
+                placeholder="© 2026 我的应用 · SLOGAN" />
+            </SkFormField>
+            <div class="sk-space" style="margin-top: 12px">
+              <SkButton variant="primary" :loading="savingBrand" @click="saveBrand">保存品牌配置</SkButton>
+              <SkButton :disabled="savingBrand" @click="resetBrand">恢复默认</SkButton>
+            </div>
+          </SkForm>
+        </template>
+      </div>
+
       <div v-else-if="activeTab === 'about'" class="about">
         <div class="about-row"><span class="about-k">规则中心版本</span><span class="mono">v{{ version }}</span></div>
         <div class="about-row"><span class="about-k">规则数（启用）</span><span>{{ about.rules }}</span></div>
@@ -88,14 +139,72 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { skMessage } from '@xzsoft/sketch-ui'
 import { api, type Me } from '../api'
 import LgTextarea from '../components/LgTextarea.vue'
+import { lettermarkSvg, sanitizeBrandSvg } from '../utils/brandMark'
+import { APP_NAME, APP_TAGLINE } from '../brand'
 import { version } from '../../package.json'
 
 const tabs = [
   { key: 'sso', label: 'SSO 登录' },
+  { key: 'brand', label: '品牌信息' },
   { key: 'security', label: '登录与安全' },
   { key: 'about', label: '关于' },
 ]
 const activeTab = ref('sso')
+
+// ---------- 品牌信息 ----------
+const brandForm = reactive({ logoSvg: '', appName: '', tagline: '', copyrightText: '' })
+const savingBrand = ref(false)
+
+const previewLogoHtml = computed(() =>
+  sanitizeBrandSvg(brandForm.logoSvg) || lettermarkSvg(brandForm.appName, APP_NAME))
+const copyrightPreview = computed(() =>
+  brandForm.copyrightText.trim() || `© ${new Date().getFullYear()} ${brandForm.appName || APP_NAME} · ${brandForm.tagline || APP_TAGLINE}`)
+
+const loadBrandForm = () =>
+  api.get<{ logoSvg: string; iconSvg: string; appName: string; tagline: string; copyrightText: string }>('/api/settings/brand')
+    .then((b) => {
+      brandForm.logoSvg = b.logoSvg || b.iconSvg || ''
+      brandForm.appName = b.appName ?? ''
+      brandForm.tagline = b.tagline ?? ''
+      brandForm.copyrightText = b.copyrightText ?? ''
+    })
+    .catch(() => {})
+
+const saveBrand = async () => {
+  savingBrand.value = true
+  try {
+    const svg = brandForm.logoSvg.trim()
+    await api.put('/api/settings/brand', {
+      logoSvg: svg,
+      iconSvg: svg, // 单 Logo 三处共用（契约仍支持双字段，此 UI 合一）
+      appName: brandForm.appName.trim(),
+      tagline: brandForm.tagline.trim(),
+      copyrightText: brandForm.copyrightText.trim(),
+    })
+    skMessage.success('品牌配置已保存')
+  } catch (e) {
+    skMessage.error((e as Error).message)
+  } finally {
+    savingBrand.value = false
+  }
+}
+
+const resetBrand = async () => {
+  brandForm.logoSvg = ''
+  brandForm.appName = ''
+  brandForm.tagline = ''
+  brandForm.copyrightText = ''
+  savingBrand.value = true
+  try {
+    await api.put('/api/settings/brand', { logoSvg: '', iconSvg: '', appName: '', tagline: '', copyrightText: '' })
+    skMessage.success('已恢复默认品牌')
+  } catch (e) {
+    skMessage.error((e as Error).message)
+  } finally {
+    savingBrand.value = false
+  }
+}
+loadBrandForm()
 
 const me = ref<Me | null>(null)
 const ssoEnabled = ref(false)
@@ -222,6 +331,27 @@ interface OidcSettings {
 </script>
 
 <style scoped>
+/* 品牌场景预览：登录页模拟 + 小尺寸场景，同源即时更新 */
+.brand-scene {
+  display: flex; gap: 18px; align-items: stretch;
+  padding: 18px; margin-bottom: 16px;
+  background: var(--sk-surface-alt, #f6f6f2); border-radius: 10px;
+}
+.brand-scene-login {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 18px 12px;
+  background: var(--sk-paper, #faf8f3); border: var(--sk-border-divider, 1px dashed #ddd); border-radius: 8px;
+}
+.brand-scene-logo :deep(svg), .brand-scene-logo > span { width: 56px; height: 56px; }
+.brand-scene-title { margin-top: 10px; font-size: 18px; font-weight: 700; color: var(--sk-text); }
+.brand-scene-sub { margin-top: 4px; font-size: 12px; color: var(--sk-text-muted); }
+.brand-scene-foot { margin-top: 14px; font-size: 11px; color: var(--sk-text-faint); letter-spacing: 2px; }
+.brand-scene-col { flex: none; display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 0 6px; }
+.brand-scene-item { display: flex; align-items: center; gap: 10px; }
+.brand-scene-icon :deep(svg), .brand-scene-icon > span { width: 28px; height: 28px; }
+.brand-scene-fav :deep(svg), .brand-scene-fav > span { width: 16px; height: 16px; }
+.brand-scene-item-label { font-size: 12px; color: var(--sk-text-muted); }
+
 .settings-layout { height: 100%; }
 .setting-tabs { margin-bottom: 14px; }
 .saved-tip { margin-left: 12px; font-size: 12px; color: var(--sk-text-faint, #aaa); }
