@@ -18,6 +18,14 @@ public interface AdminSessionBridge {
      */
     AdminPrincipal resolve(HttpServletRequest request);
 
+    /**
+     * 桥接模式 OIDC 登录成功后由宿主签发自己的会话凭证（返回给前端保存，如 JWT）。
+     * 默认抛 Unsupported——宿主未实现 OIDC 桥接时该流程不可用。
+     */
+    default String issueSession(AdminPrincipal p) {
+        throw new UnsupportedOperationException("宿主未实现 issueSession，桥接 OIDC 登录不可用");
+    }
+
     /** 桥接操作者（username 必填；role 缺省 viewer） */
     record AdminPrincipal(String username, String role) {
 

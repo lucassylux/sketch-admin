@@ -149,6 +149,7 @@ public class AdminApiController {
         out.put("clientSecretSet", !store.settingGet("oidc_client_secret").isEmpty());
         out.put("redirectBase", store.settingGet("oidc_redirect_base"));
         out.put("allowedUsers", store.settingGet("oidc_allowed_users"));
+        out.put("scopes", store.settingGet("oidc_scopes"));
         out.put("enabled", oidc.enabled());
         return ok(out);
     }
@@ -168,6 +169,7 @@ public class AdminApiController {
         setIfPresent(body, "clientId", "oidc_client_id");
         setIfPresent(body, "redirectBase", "oidc_redirect_base");
         setIfPresent(body, "allowedUsers", "oidc_allowed_users");
+        setIfPresent(body, "scopes", "oidc_scopes");
         if (body.containsKey("clientSecret")) {
             String v = body.get("clientSecret").trim();
             if (v.equals("-")) store.settingSet("oidc_client_secret", "");

@@ -59,8 +59,9 @@ public class SketchAdminAutoConfiguration {
     @ConditionalOnMissingBean(AdminSessionBridge.class)
     public SessionRegistry sessionRegistry(AdminStore store) { return new SessionRegistry(store); }
 
+    // OidcService 两种模式共用（桥接模式由 AdminBridgeOidcController 复用）
     @Bean
-    @ConditionalOnMissingBean(AdminSessionBridge.class)
+    @ConditionalOnMissingBean(OidcService.class)
     public OidcService oidcService(AdminStore store) { return new OidcService(store); }
 
     @Bean
@@ -76,6 +77,15 @@ public class SketchAdminAutoConfiguration {
     public com.xzsoft.sketchadmin.web.AdminBridgeApiController adminBridgeApiController(
             AdminStore store, AdminSessionBridge bridge) {
         return new com.xzsoft.sketchadmin.web.AdminBridgeApiController(store, bridge);
+    }
+
+    /** 桥接模式通用 OIDC（默认开；宿主自带 OIDC 体系时关掉防路径冲突） */
+    @Bean
+    @ConditionalOnBean(AdminSessionBridge.class)
+    @ConditionalOnProperty(name = "sketch-admin.bridge.oidc-endpoint", havingValue = "true", matchIfMissing = true)
+    public com.xzsoft.sketchadmin.web.AdminBridgeOidcController adminBridgeOidcController(
+            AdminStore store, AdminSessionBridge bridge, com.xzsoft.sketchadmin.oidc.OidcService oidc) {
+        return new com.xzsoft.sketchadmin.web.AdminBridgeOidcController(store, bridge, oidc);
     }
 
     /** 桥接模式改密端点（默认开；宿主自带 /api/auth/password 时关掉防同路径冲突） */

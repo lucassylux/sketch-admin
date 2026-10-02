@@ -54,3 +54,13 @@
   （Logo 未配置时按应用名首字动态生成 SVG 徽标，favicon 同样适用）
 - BrandLogo / 登录页 / 侧边栏 / 系统设置"品牌信息"页全部接入：配置 SVG 优先，
   空则 lettermark（应用名 → 占位符名 → 首字符）
+
+### 桥接模式通用 OIDC（0.2.5 内）
+
+- 新增 `AdminBridgeOidcController`：任意 OIDC Provider 的登录/回调/配置端点
+  （GET /api/auth/oidc/login|config、POST /api/auth/oidc/callback、GET/PUT /api/settings/oidc），
+  复用独立模式 OidcService（discovery/PKCE/JWKS 验签/白名单），会话经 issueSession 由宿主签发
+- `AdminSessionBridge.issueSession` SPI：宿主实现即可获得通用 OIDC 能力
+- OidcService 增强：完整回调地址 oidc_redirect_uri 覆盖（SPA 回调路径非 /oidc/callback 时用）、
+  scope 可配（oidc_scopes）、白名单支持 `*` 全放行；OidcService Bean 改两模式共用
+- 桥接回调同名不拒：SSO 身份与本地账号同名时跳过落库直接签发（用户体系在宿主/IdP 侧）

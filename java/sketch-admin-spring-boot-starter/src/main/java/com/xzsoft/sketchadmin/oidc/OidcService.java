@@ -102,7 +102,8 @@ public class OidcService {
         params.put("response_type", "code");
         params.put("client_id", clientId());
         params.put("redirect_uri", redirectUri(req));
-        params.put("scope", "openid profile email");
+        String scopes = store.settingGet("oidc_scopes").trim();
+        params.put("scope", scopes.isEmpty() ? "openid profile email" : scopes);
         params.put("state", state);
         params.put("code_challenge", s256(verifier));
         params.put("code_challenge_method", "S256");
@@ -116,6 +117,9 @@ public class OidcService {
     }
 
     private String redirectUri(HttpServletRequest req) {
+        // 完整回调地址优先（桥接宿主前端回调路径可能不是 /oidc/callback，如 SPA 的 /callback）
+        String full = store.settingGet("oidc_redirect_uri").trim();
+        if (!full.isEmpty()) return full;
         String base = store.settingGet("oidc_redirect_base").trim();
         if (!base.isEmpty()) return base.replaceAll("/+$", "") + "/oidc/callback";
         String scheme = req.getHeader("X-Forwarded-Proto");
@@ -205,7 +209,8 @@ public class OidcService {
     private boolean allowed(String identity) {
         String raw = store.settingGet("oidc_allowed_users");
         for (String item : raw.split("[,;\\s\\n\\t\\r]+")) {
-            if (item.trim().equalsIgnoreCase(identity)) return true;
+            String t = item.trim();
+            if (t.equals("*") || t.equalsIgnoreCase(identity)) return true;
         }
         return false;
     }
