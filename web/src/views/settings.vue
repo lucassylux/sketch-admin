@@ -99,11 +99,11 @@
           <SkForm style="width: 100%">
             <SkFormField name="appName" label="应用名称"
               hint="登录页标题、侧边栏品牌文字与浏览器标签标题；留空恢复默认">
-              <SkInput v-model="brandForm.appName" :maxlength="64" placeholder="应用名" />
+              <SkInput v-model="brandForm.appName" :maxlength="64" placeholder="如：我的应用" />
             </SkFormField>
             <SkFormField name="tagline" label="副标题"
               hint="登录页应用名下方的一句话说明；留空恢复默认">
-              <SkInput v-model="brandForm.tagline" :maxlength="128" placeholder="一句话副标题" />
+              <SkInput v-model="brandForm.tagline" :maxlength="128" placeholder="一句话介绍应用用途" />
             </SkFormField>
             <SkFormField name="logoSvg" label="Logo（SVG 源码）"
               hint="登录页 / 侧边栏 / 浏览器页签三处共用；建议简洁图形（小到 16px 仍可辨认）。留空按应用名首字生成徽标；渲染前白名单消毒">
