@@ -27,3 +27,13 @@
 - starter：`AdminBridgeApiController` 补 `POST /api/auth/password`（当前登录用户改自己密码，
   校验旧密/≥8 位；SSO 桥接账号无本地密码，400 提示去认证中心改）
 - web 模板：账号下拉菜单新增"修改密码"（原/新/确认弹窗，复用契约端点）
+
+## 0.2.2（2026-10-02）
+
+### 品牌外观配置（登录页 logo / 页脚文案进系统设置）
+
+- 契约新增 `GET /api/settings/brand`（登录前公开读）与 `PUT /api/settings/brand`（admin）——
+  桥接与独立两种模式均提供
+- 管理面"系统设置 → 品牌外观"：logo SVG 源码（≤20KB，留空恢复默认）+ 页脚文案（≤200 字符），带实时预览
+- 登录页读取配置渲染；SVG 经前端白名单消毒（仅保留绘图标签与属性，剥 script/事件属性）——
+  v-html 渲染用户 SVG 是存储型 XSS 面，必须过滤

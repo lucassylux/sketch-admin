@@ -184,6 +184,29 @@ public class AdminBridgeApiController {
         return ok(Map.of("ttlHours", store.sessionTtlHours()));
     }
 
+    // ---------- 品牌外观（登录页 logo / 页脚文案；GET 登录前公开读，PUT admin） ----------
+
+    @GetMapping("/api/settings/brand")
+    public ResponseEntity<?> brandGet() {
+        return ok(Map.of(
+                "logoSvg", store.settingGet("brand_logo_svg"),
+                "footText", store.settingGet("brand_foot_text")));
+    }
+
+    @PutMapping("/api/settings/brand")
+    public ResponseEntity<?> brandPut(HttpServletRequest req, @RequestBody Map<String, String> body) {
+        var denied = require(req, "admin");
+        if (denied != null) return denied;
+        String logo = body.getOrDefault("logoSvg", "");
+        String foot = body.getOrDefault("footText", "");
+        if (logo.length() > 20000) return err(HttpStatus.BAD_REQUEST, "logo SVG 过大（≤20KB）");
+        if (foot.length() > 200) return err(HttpStatus.BAD_REQUEST, "页脚文案过长（≤200 字符）");
+        store.settingSet("brand_logo_svg", logo);
+        store.settingSet("brand_foot_text", foot);
+        store.audit(user(req).username(), "update", "settings/brand", "logo=" + (logo.isBlank() ? "reset" : "custom") + ",foot=" + (foot.isBlank() ? "reset" : "custom"));
+        return ok(Map.of("logoSvg", logo, "footText", foot));
+    }
+
     // ---------- 内部 ----------
 
     private static String str(Map<String, Object> m, String k) {
