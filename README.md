@@ -65,7 +65,7 @@ AdminSessionBridge bridge() {
 }
 ```
 
-提供该 Bean 后 starter 自动切换：只注册字典/审计/用户/会话设置四组端点（鉴权走桥），
+提供该 Bean 后 starter 自动切换：只注册字典/审计/用户/会话设置/改自己密码五组端点（鉴权走桥），
 starter 自带的登录/SSO/会话端点不再注册（与宿主 `/api/auth/*` 零冲突）。
 
 ### 前端

@@ -42,6 +42,26 @@
           </SkDropdown>
         </span>
       </header>
+
+      <!-- 修改密码（账号下拉入口；SSO 桥接账号后端会拒绝并提示去认证中心） -->
+      <SkModal v-model:open="pwOpen" title="修改密码" :width="420">
+        <SkForm layout="vertical">
+          <SkFormField label="原密码" name="oldPassword">
+            <SkInput v-model="pwForm.oldPassword" type="password" autocomplete="current-password" />
+          </SkFormField>
+          <SkFormField label="新密码" name="newPassword" hint="至少 8 位">
+            <SkInput v-model="pwForm.newPassword" type="password" autocomplete="new-password" />
+          </SkFormField>
+          <SkFormField label="确认新密码" name="confirm">
+            <SkInput v-model="pwForm.confirm" type="password" autocomplete="new-password" />
+          </SkFormField>
+        </SkForm>
+        <template #footer>
+          <SkButton @click="pwOpen = false">取消</SkButton>
+          <SkButton variant="primary" :loading="pwSaving" @click="changePassword">保存</SkButton>
+        </template>
+      </SkModal>
+
       <main class="content">
         <router-view />
       </main>
@@ -62,6 +82,7 @@ import {
   SkIconChevronDown,
 } from '@xzsoft/sketch-ui/icons'
 import BrandLogo from '../components/BrandLogo.vue'
+import { skMessage } from '@xzsoft/sketch-ui'
 import { api, type Me } from '../api'
 import { clearSession } from '../router'
 
@@ -100,14 +121,40 @@ const crumbs = computed(() => crumbsMap[route.path] ?? [])
 const avatarChar = computed(() => (me.value?.username || 'U').slice(0, 1).toUpperCase())
 
 const userMenuItems = [
+  { key: 'password', label: '修改密码' },
   { key: 'logout', label: '退出登录', danger: true },
 ]
+const pwOpen = ref(false)
+const pwSaving = ref(false)
+const pwForm = ref({ oldPassword: '', newPassword: '', confirm: '' })
+
 const onUserMenu = (key: string | number) => {
+  if (key === 'password') {
+    pwForm.value = { oldPassword: '', newPassword: '', confirm: '' }
+    pwOpen.value = true
+    return
+  }
   if (key === 'logout') {
     clearSession()
     localStorage.removeItem('lg_center_user')
     void api.post('/api/auth/logout').catch(() => {})
     router.push('/login')
+  }
+}
+
+const changePassword = async () => {
+  const f = pwForm.value
+  if (!f.oldPassword || f.newPassword.length < 8) return skMessage.warning('请填写原密码，新密码至少 8 位')
+  if (f.newPassword !== f.confirm) return skMessage.warning('两次输入的新密码不一致')
+  pwSaving.value = true
+  try {
+    await api.post('/api/auth/password', { oldPassword: f.oldPassword, newPassword: f.newPassword })
+    skMessage.success('密码已修改')
+    pwOpen.value = false
+  } catch (e) {
+    skMessage.error((e as Error).message)
+  } finally {
+    pwSaving.value = false
   }
 }
 </script>

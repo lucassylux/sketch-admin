@@ -19,3 +19,11 @@
 - go-admin：本地账号 bcrypt、SSO/OIDC（授权码+PKCE，未配置即休眠）、RBAC 三级、
   登录防爆破（同 IP 连续失败 5 次锁 15 分钟）、`ImportLocalUser` 存量账号直搬、SPA 静态托管
 - Java starter：管理库连接池化（Hikari）、SPA 回退放行 `/error`、H2 保留字规避（setting_key/setting_value）
+
+## 0.2.1（2026-10-02）
+
+### 桥接模式补改密端点 + 模板下拉入口
+
+- starter：`AdminBridgeApiController` 补 `POST /api/auth/password`（当前登录用户改自己密码，
+  校验旧密/≥8 位；SSO 桥接账号无本地密码，400 提示去认证中心改）
+- web 模板：账号下拉菜单新增"修改密码"（原/新/确认弹窗，复用契约端点）

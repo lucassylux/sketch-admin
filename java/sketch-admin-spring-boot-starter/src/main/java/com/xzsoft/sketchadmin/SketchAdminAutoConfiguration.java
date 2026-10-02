@@ -2,6 +2,7 @@ package com.xzsoft.sketchadmin;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -75,6 +76,15 @@ public class SketchAdminAutoConfiguration {
     public com.xzsoft.sketchadmin.web.AdminBridgeApiController adminBridgeApiController(
             AdminStore store, AdminSessionBridge bridge) {
         return new com.xzsoft.sketchadmin.web.AdminBridgeApiController(store, bridge);
+    }
+
+    /** 桥接模式改密端点（默认开；宿主自带 /api/auth/password 时关掉防同路径冲突） */
+    @Bean
+    @ConditionalOnBean(AdminSessionBridge.class)
+    @ConditionalOnProperty(name = "sketch-admin.bridge.password-endpoint", havingValue = "true", matchIfMissing = true)
+    public com.xzsoft.sketchadmin.web.AdminBridgePasswordController adminBridgePasswordController(
+            AdminStore store, AdminSessionBridge bridge) {
+        return new com.xzsoft.sketchadmin.web.AdminBridgePasswordController(store, bridge);
     }
 
     private static void seedEnv(AdminStore store, String env, String key) {
