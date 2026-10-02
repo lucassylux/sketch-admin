@@ -69,3 +69,10 @@
 
 - 会话时长改为**秒**口径：存储键 session_ttl_seconds、GET/PUT 返回/接收 ttlSeconds、
   SessionRegistry 运行时按秒；旧 session_ttl_hours 自动迁移（×3600），缺省 12 小时
+
+## 0.2.7（2026-10-02）
+
+- users 表新增 `status`（1=启用 0=禁用，存量库自动补列）；`PUT /api/users/{username}/status`
+  启停端点（admin；不可禁用自己），禁用对本地登录与 SSO 登录同时生效
+- `upsertSsoUser` 撞名不再拒绝：绑定 subject 到既有账号（同一账号支持本地密码 + SSO 双通道）
+- 用户列表返回 status；OIDC 回调拒绝禁用账号

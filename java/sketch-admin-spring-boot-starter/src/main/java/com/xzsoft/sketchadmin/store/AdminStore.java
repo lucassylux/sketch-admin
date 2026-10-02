@@ -89,6 +89,10 @@ public class AdminStore implements AutoCloseable {
         try (Statement st = conn.createStatement()) {
             for (String q : ddl) st.execute(q);
         }
+        // users.status：1=启用 0=禁用（存量库补列；SQLite/H2 均无 ADD COLUMN IF NOT EXISTS，重复列错误忽略）
+        try (Statement st = conn.createStatement()) {
+            st.execute("ALTER TABLE users ADD COLUMN status INT NOT NULL DEFAULT 1");
+        } catch (SQLException ignored) { }
     }
 
     private void seed(Connection conn) throws SQLException {
@@ -129,7 +133,7 @@ public class AdminStore implements AutoCloseable {
     }
 
     public List<Map<String, Object>> listUsers() {
-        return queryList("SELECT username,role,subject,created_at,last_login_at FROM users ORDER BY username");
+        return queryList("SELECT username,role,subject,status,created_at,last_login_at FROM users ORDER BY username");
     }
 
     public int createUser(String username, String passwordHash, String role) {
@@ -172,7 +176,12 @@ public class AdminStore implements AutoCloseable {
             return existing;
         }
         Map<String, Object> sameName = findUser(username);
-        if (sameName != null) return null; // 撞名拒绝
+        if (sameName != null) {
+            // 撞名不拒：绑定 subject 到既有账号（同一账号支持本地密码 + SSO 双通道登录）
+            update("UPDATE users SET subject=? WHERE username=?", subject, username);
+            sameName.put("subject", subject);
+            return sameName;
+        }
         String random = UUID.randomUUID().toString();
         createUser(username, encoder.encode(random), "editor");
         Map<String, Object> created = new LinkedHashMap<>();
@@ -182,6 +191,17 @@ public class AdminStore implements AutoCloseable {
     }
 
     public boolean checkPassword(String raw, String hash) { return encoder.matches(raw, hash); }
+
+    /** 启停（禁用后本地登录与 SSO 登录均拒绝） */
+    public int setUserEnabled(String username, boolean enabled) {
+        return update("UPDATE users SET status=? WHERE username=?", enabled ? 1 : 0, username);
+    }
+
+    /** 启用状态（不存在视为禁用） */
+    public boolean userEnabled(String username) {
+        Object v = queryScalar("SELECT status FROM users WHERE username=?", username);
+        return v != null && Integer.parseInt(v.toString()) == 1;
+    }
     public String encode(String raw) { return encoder.encode(raw); }
 
     // ---------- 字典 ----------

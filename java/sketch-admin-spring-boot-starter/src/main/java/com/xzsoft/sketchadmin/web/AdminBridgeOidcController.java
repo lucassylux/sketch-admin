@@ -69,6 +69,9 @@ public class AdminBridgeOidcController {
             var u = store.upsertSsoUser(identity.username(), identity.subject());
             String username = u != null ? (String) u.get("username") : identity.username();
             String role = u != null ? (String) u.get("role") : "editor";
+            if (!store.userEnabled(username)) {
+                return err(HttpStatus.FORBIDDEN, "该账号已被禁用，请联系管理员");
+            }
             if (u != null) store.touchLogin(username);
             store.audit(username, "sso-login", "user/" + username, "bridge-oidc");
             String token = bridge.issueSession(AdminSessionBridge.AdminPrincipal.of(username, role));

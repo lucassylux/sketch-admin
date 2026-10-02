@@ -164,6 +164,22 @@ public class AdminBridgeApiController {
         return ok(Map.of("ok", true));
     }
 
+    /** 用户启停（禁用后本地登录与 SSO 登录均拒绝；不可禁用自己） */
+    @PutMapping("/api/users/{username}/status")
+    public ResponseEntity<?> userStatus(HttpServletRequest req, @PathVariable String username,
+                                        @RequestBody Map<String, Boolean> body) {
+        var denied = require(req, "admin");
+        if (denied != null) return denied;
+        Boolean enabled = body.get("enabled");
+        if (enabled == null) return err(HttpStatus.BAD_REQUEST, "enabled 必填");
+        if (!enabled && user(req).username().equals(username)) {
+            return err(HttpStatus.BAD_REQUEST, "不能禁用自己");
+        }
+        if (store.setUserEnabled(username, enabled) == 0) return err(HttpStatus.NOT_FOUND, "不存在");
+        store.audit(user(req).username(), "update", "user/" + username + "/status", enabled ? "enabled" : "disabled");
+        return ok(Map.of("username", username, "enabled", enabled));
+    }
+
     // ---------- 会话设置（桥接模式下仅供展示；桥接会话由宿主管理） ----------
 
     @GetMapping("/api/settings/session")

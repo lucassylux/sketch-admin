@@ -362,6 +362,22 @@ public class AdminApiController {
         return ok(Map.of("ok", true));
     }
 
+    /** 用户启停（禁用后本地登录与 SSO 登录均拒绝；不可禁用自己） */
+    @PutMapping("/api/users/{username}/status")
+    public ResponseEntity<?> userStatus(@CookieValue(value = COOKIE, required = false) String token,
+                                        @PathVariable String username, @RequestBody Map<String, Boolean> body) {
+        var denied = notAdmin(token);
+        if (denied != null) return denied;
+        Boolean enabled = body.get("enabled");
+        if (enabled == null) return err(HttpStatus.BAD_REQUEST, "enabled 必填");
+        if (!enabled && sessions.get(token).username().equals(username)) {
+            return err(HttpStatus.BAD_REQUEST, "不能禁用自己");
+        }
+        if (store.setUserEnabled(username, enabled) == 0) return err(HttpStatus.NOT_FOUND, "不存在");
+        store.audit(sessions.get(token).username(), "update", "user/" + username + "/status", enabled ? "enabled" : "disabled");
+        return ok(Map.of("username", username, "enabled", enabled));
+    }
+
     // ---------- 内部 ----------
 
     private static String str(Map<String, Object> m, String k) {
