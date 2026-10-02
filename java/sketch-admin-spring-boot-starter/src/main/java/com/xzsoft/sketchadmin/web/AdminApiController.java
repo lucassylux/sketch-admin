@@ -213,13 +213,16 @@ public class AdminApiController {
         var denied = notAdmin(token);
         if (denied != null) return denied;
         String logo = body.getOrDefault("logoSvg", "");
-        String foot = body.getOrDefault("footText", "");
-        if (logo.length() > 20000) return err(HttpStatus.BAD_REQUEST, "logo SVG 过大（≤20KB）");
-        if (foot.length() > 200) return err(HttpStatus.BAD_REQUEST, "页脚文案过长（≤200 字符）");
+        String icon = body.getOrDefault("iconSvg", "");
+        String copyright = body.getOrDefault("copyrightText", "");
+        if (logo.length() > 20000 || icon.length() > 20000) return err(HttpStatus.BAD_REQUEST, "SVG 过大（各 ≤20KB）");
+        if (copyright.length() > 200) return err(HttpStatus.BAD_REQUEST, "版权文案过长（≤200 字符）");
         store.settingSet("brand_logo_svg", logo);
-        store.settingSet("brand_foot_text", foot);
-        store.audit(sessions.get(token).username(), "update", "settings/brand", "logo=" + (logo.isBlank() ? "reset" : "custom") + ",foot=" + (foot.isBlank() ? "reset" : "custom"));
-        return ok(Map.of("logoSvg", logo, "footText", foot));
+        store.settingSet("brand_icon_svg", icon);
+        store.settingSet("brand_copyright_text", copyright);
+        store.audit(sessions.get(token).username(), "update", "settings/brand",
+                "logo=" + (logo.isBlank() ? "reset" : "custom") + ",icon=" + (icon.isBlank() ? "reset" : "custom") + ",copyright=" + (copyright.isBlank() ? "reset" : "custom"));
+        return ok(Map.of("logoSvg", logo, "iconSvg", icon, "copyrightText", copyright));
     }
 
     // ---------- 字典 ----------
